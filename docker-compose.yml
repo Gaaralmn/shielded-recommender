@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: 'bitnami/zookeeper:latest'
+    ports:
+      - '2181:2181'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    volumes:
+      - 'zookeeper_data:/bitnami/zookeeper'
+
+  kafka:
+    image: 'bitnami/kafka:latest'
+    ports:
+      - '9092:9092'
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+    volumes:
+      - 'kafka_data:/bitnami/kafka'
+
+  redis:
+    image: 'redis:latest'
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'redis_data:/data'
+
+  postgres:
+    image: 'postgres:13'
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - 'postgres_db_data:/var/lib/postgresql/data'
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: ./airflow/Dockerfile
+    entrypoint: /bin/bash -c "airflow db init && airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com"
+    depends_on:
+      - postgres
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: ./airflow/Dockerfile
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres
+      - airflow-init
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: ./airflow/Dockerfile
+    depends_on:
+      - postgres
+      - airflow-init
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+  mlflow:
+    image: 'mlflow/mlflow:latest'
+    ports:
+      - '5000:5000'
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://airflow:airflow@postgres/airflow
+      --default-artifact-root ./mlruns
+      -h 0.0.0.0
+    depends_on:
+      - postgres
+    volumes:
+      - ./mlflow:/mlruns
+
+  gatekeeper:
+    build:
+      context: .
+      dockerfile: ./services/gatekeeper/Dockerfile
+    ports:
+      - '8000:8000'
+    depends_on:
+      - kafka
+      - redis
+    volumes:
+      - ./services/gatekeeper/src:/app/src
+      - ./schemas:/app/schemas
+
+  data_producer:
+    build:
+      context: .
+      dockerfile: ./services/data_producer/Dockerfile
+    depends_on:
+      - kafka
+    volumes:
+      - ./services/data_producer/src:/app/src
+      - ./schemas:/app/schemas
+
+  trainer:
+    build:
+      context: .
+      dockerfile: ./services/trainer/Dockerfile
+    depends_on:
+      - kafka
+      - mlflow
+    volumes:
+      - ./services/trainer/src:/app/src
+      - ./services/trainer/dags:/app/dags
+      - ./schemas:/app/schemas
+
+volumes:
+  zookeeper_data:
+  kafka_data:
+  redis_data:
+  postgres_db_data:

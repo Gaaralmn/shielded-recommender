@@ -1,0 +1,18 @@
+# Core data science and plotting libraries
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+
+# For running notebooks
+jupyterlab
+
+# To interact with the model registry
+mlflow
+
+# Optional: if you need to connect to Kafka from a notebook
+kafka-python
+
+# For downloading datasets and models from Kaggle
+kagglehub
