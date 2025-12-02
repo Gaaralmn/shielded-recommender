@@ -1,4 +1,6 @@
 tensorflow-recommenders
-mlflow
+mlflow==2.17.0
 kafka-python
 pydantic
+scikit-learn
+pandas

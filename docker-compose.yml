@@ -2,48 +2,51 @@ version: '3.8'
 
 services:
   kafka:
-    image: 'bitnami/kafka:latest'
+    image: 'confluentinc/cp-kafka:7.6.1'
     ports:
       - '9092:9092'
     environment:
       # KRaft settings for ZooKeeper-less Kafka
-      - KAFKA_CFG_NODE_ID=0
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
-      - ALLOW_PLAINTEXT_LISTENER=yes
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://kafka:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     volumes:
-      - 'kafka_data:/bitnami/kafka'
+      - 'kafka_data:/var/lib/kafka/data'
 
   kafka-ui:
-    image: 'docker.redpanda.com/redpandadata/console:latest'
+    image: 'docker.redpanda.com/redpandadata/console:v2.4.5'
     ports:
-      - '8081:8080'
+      - '${KAFKA_UI_HOST_PORT:-8081}:8080'
     depends_on:
       - kafka
     environment:
       - KAFKA_BROKERS=kafka:9092
 
   redis:
-    image: 'redis:latest'
+    image: 'redis:7.2'
     ports:
-      - '6379:6379'
+      - '6379:6379' # Standard Redis port, often left as is
     volumes:
       - 'redis_data:/data'
 
   postgres:
     image: 'postgres:13'
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - 'postgres_db_data:/var/lib/postgresql/data'
+      - ./postgres:/docker-entrypoint-initdb.d
 
   airflow-init:
     build:
@@ -58,7 +61,7 @@ services:
       context: .
       dockerfile: ./airflow/Dockerfile
     ports:
-      - '8080:8080'
+      - '${AIRFLOW_HOST_PORT:-8080}:8080'
     depends_on:
       - postgres
       - airflow-init
@@ -68,7 +71,7 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
 
   airflow-scheduler:
@@ -84,29 +87,45 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
 
-  mlflow:
-    image: 'ghcr.io/mlflow/mlflow:v2.13.2'
-    ports:
-      - '5001:5000'
+  mlflow-db-upgrade:
+    build:
+      context: .
+      dockerfile: ./mlflow_custom/Dockerfile
+      args:
+        MLFLOW_IMAGE_TAG: ${MLFLOW_IMAGE_TAG:-v2.17.0}
     command: >
-      mlflow server
-      --backend-store-uri postgresql://airflow:airflow@postgres/airflow
-      --default-artifact-root ./mlruns
-      -h 0.0.0.0
+      mlflow db upgrade postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     depends_on:
       - postgres
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: ./mlflow_custom/Dockerfile
+      args:
+        MLFLOW_IMAGE_TAG: ${MLFLOW_IMAGE_TAG:-v2.17.0}
+    ports:
+      - '${MLFLOW_HOST_PORT:-5001}:5000'
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${MLFLOW_DB}
+      --default-artifact-root mlflow-artifacts:/
+      --artifacts-destination /mlruns
+      --host 0.0.0.0
+    depends_on:
+      - mlflow-db-upgrade
     volumes:
-      - ./mlflow:/mlruns
+      - ./mlflow_custom/mlruns:/mlruns
 
   gatekeeper:
     build:
       context: .
       dockerfile: ./services/gatekeeper/Dockerfile
     ports:
-      - '8000:8000'
+      - '${GATEKEEPER_HOST_PORT:-8000}:8000'
     depends_on:
       - kafka
       - redis
@@ -140,6 +159,7 @@ services:
       - ./services/trainer/src:/app/src
       - ./services/trainer/dags:/app/dags
       - ./recommender_schemas:/app/recommender_schemas
+      - ./data:/app/retailrocket/data
     environment:
       - PYTHONPATH=/app
 
@@ -147,3 +167,4 @@ volumes:
   kafka_data:
   redis_data:
   postgres_db_data:
+  mlflow_data:
