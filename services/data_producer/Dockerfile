@@ -6,18 +6,20 @@ WORKDIR /app
 
 # Create a non-root user
 RUN useradd --create-home appuser
-USER appuser
 
 # Copy the dependencies file to the working directory
-COPY --chown=appuser:appuser ./services/data_producer/requirements.txt .
+COPY ./services/data_producer/requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir uv && \
+    python -m uv pip install --no-cache-dir -r requirements.txt
+
+# Now, switch to the non-root user for running the application
+USER appuser
 
 # Copy the rest of the application's code to the working directory
 COPY --chown=appuser:appuser ./services/data_producer/src ./src
-COPY --chown=appuser:appuser ./schemas ./schemas
+COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
 
 # Run the data producer script
 # Note: This assumes you have a producer.py script in the src directory

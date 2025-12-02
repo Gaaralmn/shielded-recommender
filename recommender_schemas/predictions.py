@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from .events import ClickEvent
+from recommender_schemas.events import ClickEvent
 
 class PredictionRequest(ClickEvent):
     pass

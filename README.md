@@ -78,8 +78,9 @@ The project is organized into a modular, service-oriented architecture.
 
 3.  **Access the services**:
     *   **Airflow UI**: `http://localhost:8080` (user: `admin`, pass: `admin`)
-    *   **MLflow UI**: `http://localhost:5000`
+    *   **MLflow UI**: `http://localhost:5001`
     *   **Gatekeeper API docs**: `http://localhost:8000/docs`
+    *   **Kafka UI**: `http://localhost:8081`
 
 4.  **Stop all services**:
     ```bash
