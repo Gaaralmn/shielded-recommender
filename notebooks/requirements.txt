@@ -9,10 +9,13 @@ seaborn
 jupyterlab
 
 # To interact with the model registry
-mlflow
+mlflow==2.17.0
 
 # Optional: if you need to connect to Kafka from a notebook
 kafka-python
 
 # For downloading datasets and models from Kaggle
 kagglehub
+
+# Pin urllib3 to avoid OpenSSL/LibreSSL warning on macOS
+urllib3<2.0
