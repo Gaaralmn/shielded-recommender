@@ -80,9 +80,6 @@ def main():
 
     logging.info(f"Reading dataset from {DATA_FILE_PATH}...")
     df = pd.read_csv(DATA_FILE_PATH)
-    
-    # We only need user_id and item_id for the ClickEvent
-    df = df[['visitorid', 'itemid']].rename(columns={'visitorid': 'user_id', 'itemid': 'item_id'})
 
     logging.info("Starting to produce events to Kafka...")
     try:
@@ -90,8 +87,8 @@ def main():
             for row in df.itertuples(index=False):
                 # Create a Pydantic model for the real event
                 event = ClickEvent(
-                    user_id=str(row.user_id),
-                    item_id=str(row.item_id),
+                    user_id=str(row.visitorid),
+                    item_id=str(row.itemid),
                     timestamp=datetime.utcnow()
                 )
                 
