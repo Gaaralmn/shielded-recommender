@@ -136,3 +136,6 @@ data/
 
 # MLflow
 mlruns/
+
+# airflow
+airflow/logs/*

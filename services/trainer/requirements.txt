@@ -1,5 +1,4 @@
 tensorflow-recommenders
-tensorflow
 mlflow
 kafka-python
 pydantic

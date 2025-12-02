@@ -6,18 +6,20 @@ WORKDIR /app
 
 # Create a non-root user
 RUN useradd --create-home appuser
-USER appuser
 
 # Copy the dependencies file to the working directory
-COPY --chown=appuser:appuser ./services/trainer/requirements.txt .
+COPY ./services/trainer/requirements.txt .
 
 # Install uv and then use it to install packages from requirements.txt
 RUN pip install --no-cache-dir uv && \
-    uv pip install --no-cache -r requirements.txt
+    python -m uv pip install --no-cache-dir -r requirements.txt
+
+# Now, switch to the non-root user for running the application
+USER appuser
 
 # Copy the rest of the application's code to the working directory
 COPY --chown=appuser:appuser ./services/trainer/src ./src
-COPY --chown=appuser:appuser ./schemas ./schemas
+COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
 COPY --chown=appuser:appuser ./services/trainer/dags ./dags
 
 # Run the training script
