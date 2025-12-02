@@ -7,6 +7,7 @@ services:
       - '9092:9092'
     environment:
       # KRaft settings for ZooKeeper-less Kafka
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
