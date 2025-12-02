@@ -1,0 +1,91 @@
+# Multi-stage Dockerfile for Gatekeeper Service
+# This provides optimized images for both API and Consumer
+
+# ============================================
+# Stage 1: Base - Common dependencies
+# ============================================
+FROM python:3.9-slim AS base
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd --create-home appuser
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY ./services/gatekeeper/requirements.txt .
+RUN pip install --no-cache-dir uv && \
+    python -m uv pip install --no-cache-dir -r requirements.txt
+
+# ============================================
+# Stage 2: API - Only what's needed for API
+# ============================================
+FROM python:3.9-slim AS api
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd --create-home appuser
+
+# Copy only Python packages from base stage
+COPY --from=base /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=base /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --chown=appuser:appuser ./services/gatekeeper/src ./src
+COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
+
+USER appuser
+
+EXPOSE 8000
+
+# API-specific command
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ============================================
+# Stage 3: Consumer - Optimized for consumer
+# ============================================
+FROM python:3.9-slim AS consumer
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd --create-home appuser
+
+# Copy only Python packages from base stage
+COPY --from=base /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=base /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --chown=appuser:appuser ./services/gatekeeper/src ./src
+COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
+
+USER appuser
+
+# Consumer-specific command
+CMD ["python", "-m", "src.consumer"]
+
+# ============================================
+# Stage 4: Development - Includes all tools
+# ============================================
+FROM base AS development
+
+# Install development dependencies
+RUN pip install --no-cache-dir \
+    pytest \
+    black \
+    flake8 \
+    ipython
+
+# Copy application code
+COPY --chown=appuser:appuser ./services/gatekeeper/src ./src
+COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
+
+USER appuser
+
+# Default to bash for development
+CMD ["/bin/bash"]

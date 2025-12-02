@@ -2,3 +2,6 @@ fastapi
 uvicorn
 redis
 scikit-learn
+mlflow==2.17.0
+kafka-python
+pandas
