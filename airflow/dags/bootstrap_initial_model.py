@@ -23,7 +23,7 @@ with DAG(
     - When you want to reset the model to baseline
 
     #### What It Does:
-    1. Loads `/app/retailrocket/data/events.csv` (1 year of historical data)
+    1. Loads `/app/data/retailrocket/events.csv` (1 year of historical data)
     2. Performs feature engineering (time_since_last_event_sec)
     3. Trains an Isolation Forest model on normal behavior
     4. Registers the model to MLflow as version 1
@@ -46,14 +46,14 @@ with DAG(
             # Mount the local data directory to access the RetailRocket CSV
             {
                 "source": "/Users/qingwang/Development/shielded-recommender/data",
-                "target": "/app/retailrocket/data",
+                "target": "/app/data",
                 "type": "bind",
             }
         ],
         mount_tmp_dir=False,  # Disable temp mount (not needed, causes issues on macOS)
         environment={
             "MLFLOW_TRACKING_URI": "http://mlflow:5000",
-            "DATA_PATH": "/app/retailrocket/data/retailrocket/events.csv",  # Local CSV file
+            "DATA_PATH": "/app/data/retailrocket/events.csv",  # Local CSV file
             "TRAINING_TYPE": "bootstrap",  # Tag for MLflow
             "PYTHONPATH": "/app",
         },

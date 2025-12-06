@@ -187,7 +187,7 @@ KubernetesPodOperator(
     namespace="ml-training",
     env_vars={
         "MLFLOW_TRACKING_URI": "http://mlflow.ml-system.svc.cluster.local:5000",
-        "DATA_PATH": "/app/retailrocket/data/events.csv",
+        "DATA_PATH": "/app/data/events.csv",
         "TRAINING_TYPE": "bootstrap",
     },
     service_account_name="airflow-worker",
