@@ -87,7 +87,7 @@ export PYTHONPATH="${PYTHONPATH}:$(cd ../.. && pwd)"
 Train the model first:
 ```bash
 cd ../..  # Project root
-PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5001" \
+PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5000" \
   python services/trainer/src/train.py
 ```
 

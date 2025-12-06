@@ -27,7 +27,7 @@ pip install -r requirements.txt
 You still need these services running (via Docker or locally):
 - **Kafka** (port 9092)
 - **Redis** (port 6379)
-- **MLflow** (port 5001)
+- **MLflow** (port 5000)
 - **PostgreSQL** (for MLflow backend)
 
 **Quick start for dependencies**:
@@ -49,7 +49,7 @@ source venv/bin/activate
 
 # Set environment variables
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export REDIS_PORT="6379"
@@ -66,7 +66,7 @@ INFO:     Started reloader process [12345] using StatReload
 INFO:     Started server process [12346]
 INFO:     Waiting for application startup.
 INFO:     Gatekeeper API starting up...
-INFO:     Connecting to MLflow at http://localhost:5001
+INFO:     Connecting to MLflow at http://localhost:5000
 INFO:     Loading model from models:/isolation-forest-bot-detector/2
 INFO:     Model loaded successfully: isolation-forest-bot-detector version 2
 INFO:     Connected to Redis at localhost:6379
@@ -92,7 +92,7 @@ source venv/bin/activate
 
 # Set environment variables
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export REDIS_PORT="6379"
@@ -124,7 +124,7 @@ cd services/gatekeeper
 source venv/bin/activate
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export START_CONSUMER="false"
@@ -138,7 +138,7 @@ cd services/gatekeeper
 source venv/bin/activate
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 
@@ -159,7 +159,7 @@ source venv/bin/activate
 
 # Set environment
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export REDIS_PORT="6379"
@@ -182,7 +182,7 @@ source venv/bin/activate
 
 # Set environment
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export REDIS_PORT="6379"
@@ -356,11 +356,11 @@ docker compose up -d kafka
 ```bash
 # Run training script
 cd ../../  # Back to project root
-PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5001" \
+PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5000" \
   python services/trainer/src/train.py
 
 # Verify model exists
-curl http://localhost:5001/api/2.0/mlflow/registered-models/get?name=isolation-forest-bot-detector
+curl http://localhost:5000/api/2.0/mlflow/registered-models/get?name=isolation-forest-bot-detector
 ```
 
 ### Problem: "Redis connection failed"
@@ -425,7 +425,7 @@ docker exec -it shielded-recommender-kafka-1 \
       "cwd": "${workspaceFolder}/services/gatekeeper",
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
-        "MLFLOW_TRACKING_URI": "http://localhost:5001",
+        "MLFLOW_TRACKING_URI": "http://localhost:5000",
         "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
         "REDIS_HOST": "localhost",
         "START_CONSUMER": "false"
@@ -439,7 +439,7 @@ docker exec -it shielded-recommender-kafka-1 \
       "cwd": "${workspaceFolder}/services/gatekeeper",
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
-        "MLFLOW_TRACKING_URI": "http://localhost:5001",
+        "MLFLOW_TRACKING_URI": "http://localhost:5000",
         "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
         "REDIS_HOST": "localhost"
       }

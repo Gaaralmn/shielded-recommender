@@ -154,13 +154,13 @@ docker compose logs -f gatekeeper
 ### Test Manually (without Docker)
 ```bash
 # Run as FastAPI app (consumer starts automatically)
-MLFLOW_TRACKING_URI=http://localhost:5001 \
+MLFLOW_TRACKING_URI=http://localhost:5000 \
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 REDIS_HOST=localhost \
 uvicorn src.main:app --reload
 
 # Or run as standalone consumer script
-MLFLOW_TRACKING_URI=http://localhost:5001 \
+MLFLOW_TRACKING_URI=http://localhost:5000 \
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 REDIS_HOST=localhost \
 python services/gatekeeper/src/main.py

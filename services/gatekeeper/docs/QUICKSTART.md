@@ -193,11 +193,11 @@ docker compose logs gatekeeper-consumer --tail 50
 **Solution**: Train and register the model first
 ```bash
 # Run training script
-PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5001" \
+PYTHONPATH=. MLFLOW_TRACKING_URI="http://localhost:5000" \
   python services/trainer/src/train.py
 
 # Verify model exists
-curl http://localhost:5001/api/2.0/mlflow/registered-models/get?name=isolation-forest-bot-detector
+curl http://localhost:5000/api/2.0/mlflow/registered-models/get?name=isolation-forest-bot-detector
 ```
 
 ### Problem: Consumer keeps restarting
