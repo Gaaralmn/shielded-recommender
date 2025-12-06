@@ -45,7 +45,59 @@ This section documents key architectural choices and the reasoning behind them. 
 > *   **Decision**: The anomaly detection is performed in real-time on a per-event basis, while the recommender model is trained in a batch process (nightly).
 > *   **Reasoning**: Anomaly detection must happen in real-time to prevent corrupt data from ever entering the system. Recommendation models, however, are less sensitive to single-event changes and are computationally expensive to train. A nightly batch training job on the complete set of `clean-events` is a standard and cost-effective industry pattern.
 
-## 4. Project Structure
+> #### Trade-off: Bootstrap vs. Continuous Retraining
+>
+> *   **Decision**: The system uses a two-phase training strategy: (1) Bootstrap training with historical data, (2) Continuous retraining with live production data.
+> *   **Reasoning**: This mirrors real production ML systems. The bootstrap phase solves the "cold start" problem by training an initial model on historical data (RetailRocket CSV). Once the system is operational, the `kafka_to_minio_pipeline` accumulates clean events in the data lake, enabling daily retraining on fresh production data. This approach demonstrates understanding of the complete ML lifecycle: initial deployment, data accumulation, and model iteration.
+> *   **Implementation**: Two separate Airflow DAGs handle this:
+>     *   `bootstrap_initial_model`: Manual trigger, uses local CSV, runs once
+>     *   `retrain_anomaly_model`: Scheduled daily, uses MinIO S3 data lake, continuous operation
+
+## 4. Model Training Lifecycle
+
+This project demonstrates production-grade MLOps practices with a complete model lifecycle:
+
+### **Phase 1: Bootstrap (Cold Start)**
+When first deploying the system, there is no trained model and no production data yet. The bootstrap process:
+
+1. **Trigger** the `bootstrap_initial_model` DAG in Airflow (manual, one-time)
+2. **Loads** historical RetailRocket dataset (`data/events.csv` - 1 year of e-commerce events)
+3. **Trains** initial Isolation Forest model on normal user behavior patterns
+4. **Registers** model as version 1 in MLflow model registry
+5. **Enables** gatekeeper service to load and serve predictions
+
+**Key Point**: This uses static historical data to get the system operational quickly.
+
+### **Phase 2: Data Accumulation**
+Once the gatekeeper is running with the bootstrap model:
+
+1. **Producer** sends events to Kafka (`raw-events` topic)
+2. **Gatekeeper** filters traffic in real-time, routes to `clean-events` or `suspicious-events` topics
+3. **Kafka-to-MinIO pipeline** runs every 15 minutes, batching clean events into Parquet files
+4. **Data lake grows** with partitioned production data: `s3://clean-events/year=2025/month=12/day=03/*.parquet`
+
+**Key Point**: Clean, vetted data accumulates for future model improvements.
+
+### **Phase 3: Continuous Retraining**
+The `retrain_anomaly_model` DAG runs automatically:
+
+1. **Scheduled** to run daily at midnight UTC
+2. **Reads** all accumulated data from MinIO data lake (`s3://clean-events`)
+3. **Trains** new model version on growing dataset (reflects latest user behavior patterns)
+4. **Registers** new version to MLflow (version 2, 3, 4...)
+5. **Gatekeeper** hot-reloads latest model (on next health check or restart)
+
+**Key Point**: Model continuously improves as more production data is collected, adapting to evolving patterns.
+
+### **Why This Matters**
+This two-phase approach demonstrates:
+- Understanding of ML "cold start" problem
+- Production data pipelines (Kafka → MinIO)
+- Automated retraining workflows (Airflow orchestration)
+- Model versioning and registry (MLflow)
+- Separation of bootstrap vs. production training logic
+
+## 5. Project Structure
 
 The project is organized into a modular, service-oriented architecture.
 
@@ -64,7 +116,7 @@ The project is organized into a modular, service-oriented architecture.
 └── Makefile                 # Development shortcuts (up, down, test, etc.)
 ```
 
-## 5. Getting Started
+## 6. Getting Started
 
 1.  **Build the Docker images**:
     ```bash
@@ -78,11 +130,129 @@ The project is organized into a modular, service-oriented architecture.
 
 3.  **Access the services**:
     *   **Airflow UI**: `http://localhost:8080` (user: `admin`, pass: `admin`)
-    *   **MLflow UI**: `http://localhost:5001`
+    *   **MLflow UI**: `http://localhost:5000`
     *   **Gatekeeper API docs**: `http://localhost:8000/docs`
     *   **Kafka UI**: `http://localhost:8081`
+    *   **MinIO Console**: `http://localhost:9001` (user: `minioadmin`, pass: `minioadmin`)
+    *   **MinIO S3 API**: `http://localhost:9000`
 
-4.  **Stop all services**:
+4.  **Bootstrap the initial model** (one-time setup):
+
+    Before the gatekeeper can filter traffic, you need to train an initial anomaly detection model:
+
+    a. Go to Airflow UI: `http://localhost:8080`
+
+    b. Find the `bootstrap_initial_model` DAG and trigger it manually
+
+    c. This trains the first model using the historical RetailRocket dataset
+
+    d. Check MLflow UI (`http://localhost:5000`) to verify the model was registered
+
+    **Note**: This only needs to be run once. After this, the `retrain_anomaly_model` DAG will run automatically every night to retrain on live production data from the MinIO data lake.
+
+5.  **Stop all services**:
     ```bash
     make down
     ```
+
+## 7. Production Deployment Considerations
+
+This project uses **Docker Compose** for local development, which is ideal for rapid iteration and demonstration. However, several architectural changes would be necessary for production deployment:
+
+### **Orchestration: Docker Compose → Kubernetes**
+
+**Current (Local Development):**
+- Airflow uses `DockerOperator` to spawn training tasks
+- Airflow containers run as root to access `/var/run/docker.sock`
+- Simple, works great for single-machine development
+
+**Production Approach:**
+- Deploy Airflow on **Kubernetes** using the official [Airflow Helm Chart](https://airflow.apache.org/docs/helm-chart/stable/index.html)
+- Replace `DockerOperator` with **`KubernetesPodOperator`**
+- No Docker socket mounting required
+- Proper RBAC and ServiceAccounts for security
+
+**Example production DAG change:**
+```python
+# Current (DockerOperator for local dev)
+from airflow.providers.docker.operators.docker import DockerOperator
+
+# Production (KubernetesPodOperator)
+from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+
+KubernetesPodOperator(
+    task_id="bootstrap_train",
+    image="your-registry.io/shielded-recommender-trainer:v1.0.0",
+    cmds=["python", "src/train.py"],
+    namespace="ml-training",
+    env_vars={
+        "MLFLOW_TRACKING_URI": "http://mlflow.ml-system.svc.cluster.local:5000",
+        "DATA_PATH": "/app/retailrocket/data/events.csv",
+        "TRAINING_TYPE": "bootstrap",
+    },
+    service_account_name="airflow-worker",
+    resources={
+        "request_memory": "2Gi",
+        "limit_memory": "4Gi",
+        "request_cpu": "1",
+        "limit_cpu": "2",
+    },
+)
+```
+
+### **Why This Matters**
+
+**Security:**
+- Running Airflow as root (current approach) is acceptable for local development but **not** for production
+- Kubernetes RBAC provides fine-grained access control
+- No direct Docker socket access eliminates a major security risk
+
+**Scalability:**
+- Kubernetes auto-scales worker pods based on load
+- Multiple training jobs can run in parallel across cluster nodes
+- Resource limits prevent runaway jobs
+
+**Reliability:**
+- Failed pods automatically restart
+- Node failures don't take down the entire system
+- Built-in health checks and monitoring
+
+### **Other Production Changes**
+
+| Component | Local Development | Production |
+|-----------|------------------|------------|
+| **Data Lake** | MinIO (self-hosted) | AWS S3 / GCS / Azure Blob |
+| **Message Queue** | Kafka (single broker) | Kafka (multi-broker cluster) or AWS MSK |
+| **Database** | PostgreSQL (single instance) | Managed PostgreSQL (RDS, Cloud SQL) with replicas |
+| **MLflow** | Local tracking server | MLflow on K8s with S3 artifact store |
+| **Secrets** | Hardcoded in docker-compose.yml | Kubernetes Secrets / AWS Secrets Manager / Vault |
+| **Monitoring** | Manual log inspection | Prometheus + Grafana + ELK Stack |
+
+### **Migration Path**
+
+To transition this project to production:
+
+1. **Containerize & Push Images**
+   ```bash
+   docker build -t your-registry.io/trainer:v1.0.0 -f services/trainer/Dockerfile .
+   docker push your-registry.io/trainer:v1.0.0
+   ```
+
+2. **Deploy Infrastructure on Kubernetes**
+   ```bash
+   helm install airflow apache-airflow/airflow -f production-values.yaml
+   kubectl apply -f k8s/mlflow-deployment.yaml
+   kubectl apply -f k8s/kafka-cluster.yaml
+   ```
+
+3. **Update DAGs to use KubernetesPodOperator**
+   - Replace all `DockerOperator` instances
+   - Add resource limits and requests
+   - Configure service accounts
+
+4. **Set up Monitoring & Alerting**
+   - Deploy Prometheus for metrics collection
+   - Configure Grafana dashboards
+   - Set up PagerDuty/Slack alerts for failures
+
+This architecture demonstrates understanding of the development-to-production lifecycle while keeping local development simple and accessible.

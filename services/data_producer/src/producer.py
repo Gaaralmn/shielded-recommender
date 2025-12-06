@@ -2,7 +2,7 @@ import os
 import time
 import random
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from kafka import KafkaProducer
@@ -54,7 +54,7 @@ def inject_bot_traffic(producer: KafkaProducer, user_id: str):
         event = ClickEvent(
             user_id=user_id,
             item_id=random_item_id,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         
         # Send to Kafka
@@ -89,7 +89,7 @@ def main():
                 event = ClickEvent(
                     user_id=str(row.visitorid),
                     item_id=str(row.itemid),
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(timezone.utc)
                 )
                 
                 # Send the real event
@@ -101,7 +101,7 @@ def main():
 
                 # Randomly decide whether to inject bot traffic
                 if random.random() < BOT_INJECTION_PROBABILITY:
-                    inject_bot_traffic(producer, user_id=str(row.user_id))
+                    inject_bot_traffic(producer, user_id=str(event.user_id))
             
             logging.info("Completed one full pass of the dataset. Restarting...")
 

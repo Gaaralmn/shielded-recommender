@@ -8,8 +8,14 @@ from sklearn.ensemble import IsolationForest
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-DATA_PATH = os.getenv("DATA_PATH", "retailrocket/data/retailrocket/events.csv") # Use env var, default to container path
+DATA_PATH = os.getenv("DATA_PATH", "s3://clean-events") # Default to S3 for production, can be overridden for bootstrap
 REGISTERED_MODEL_NAME = "isolation-forest-bot-detector"
+TRAINING_TYPE = os.getenv("TRAINING_TYPE", "retrain")  # "bootstrap" or "retrain"
+
+# MinIO/S3 settings for reading from the data lake
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
 
 
 def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
@@ -22,8 +28,13 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     # Standardize column names to match the schema contract
     df = df.rename(columns={'visitorid': 'user_id', 'itemid': 'item_id'})
 
-    # Convert timestamp to datetime
-    df['timestamp_dt'] = pd.to_datetime(df['timestamp'], unit='ms')
+    # Convert timestamp to datetime - handle both numeric (ms) and ISO string formats
+    if pd.api.types.is_numeric_dtype(df['timestamp']):
+        # Bootstrap data: numeric timestamp in milliseconds
+        df['timestamp_dt'] = pd.to_datetime(df['timestamp'], unit='ms')
+    else:
+        # Production data from Kafka: ISO-formatted string
+        df['timestamp_dt'] = pd.to_datetime(df['timestamp'])
 
     # Sort by user and timestamp to correctly calculate time differences
     df_sorted = df.sort_values(by=['user_id', 'timestamp_dt']).reset_index(drop=True)
@@ -54,9 +65,25 @@ if __name__ == "__main__":
     logging.info(f"Using experiment: {experiment_name}")
 
     # --- 2. Load Data ---
-    try: 
-        raw_df = pd.read_csv(DATA_PATH)
-        logging.info(f"Successfully loaded {len(raw_df)} events from {DATA_PATH}")
+    logging.info(f"Attempting to load data from: {DATA_PATH}")
+    try:
+        if DATA_PATH.startswith("s3://"):
+            # Data is in S3/MinIO, load all parquet files from the bucket
+            if not all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY]):
+                raise ValueError("S3 environment variables are not fully configured for S3 path.")
+
+            storage_options = {
+                "key": S3_ACCESS_KEY_ID,
+                "secret": S3_SECRET_ACCESS_KEY,
+                "client_kwargs": {"endpoint_url": S3_ENDPOINT_URL}
+            }
+            raw_df = pd.read_parquet(DATA_PATH, storage_options=storage_options)
+            logging.info(f"Successfully loaded {len(raw_df)} events from data lake: {DATA_PATH}")
+        else:
+            # Fallback to loading a local CSV file
+            raw_df = pd.read_csv(DATA_PATH)
+            logging.info(f"Successfully loaded {len(raw_df)} events from local CSV: {DATA_PATH}")
+
     except FileNotFoundError:
         logging.error(f"Data file not found at {DATA_PATH}. Exiting.")
         exit(1)
@@ -94,6 +121,8 @@ if __name__ == "__main__":
         logging.info(f"Started MLflow run: {run.info.run_id}")
         mlflow.set_tag("ml.purpose", "anomaly-detection")
         mlflow.set_tag("training.strategy", "normal-behavior-only")
+        mlflow.set_tag("training.type", TRAINING_TYPE)  # "bootstrap" or "retrain"
+        mlflow.set_tag("data.source", DATA_PATH)
 
         # Define and train the Isolation Forest model
         # Since we're training ONLY on normal behavior, contamination should be low

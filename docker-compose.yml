@@ -36,6 +36,40 @@ services:
     volumes:
       - 'redis_data:/data'
 
+  # MinIO - S3-compatible object storage (Data Lake)
+  minio:
+    image: 'minio/minio:latest'
+    ports:
+      - '${MINIO_API_PORT:-9000}:9000'      # S3 API
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'  # Web Console
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - 'minio_data:/data'
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # MinIO client - Creates buckets on startup
+  minio-setup:
+    image: 'minio/mc:latest'
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb myminio/clean-events --ignore-existing;
+      mc mb myminio/suspicious-events --ignore-existing;
+      mc mb myminio/raw-events --ignore-existing;
+      echo 'MinIO buckets created successfully';
+      exit 0;
+      "
+
   postgres:
     image: 'postgres:13'
     ports:
@@ -55,6 +89,10 @@ services:
     entrypoint: /bin/bash -c "airflow db init && airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com"
     depends_on:
       - postgres
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
 
   airflow-webserver:
     build:
@@ -69,10 +107,15 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    # Run as root for local development to access Docker socket
+    # PRODUCTION: Use KubernetesPodOperator instead of DockerOperator
+    user: "0:0"
+    command: webserver
 
   airflow-scheduler:
     build:
@@ -85,10 +128,15 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    # Run as root for local development to access Docker socket
+    # PRODUCTION: Use KubernetesPodOperator instead of DockerOperator
+    user: "0:0"
+    command: scheduler
 
   mlflow-db-upgrade:
     build:
@@ -108,7 +156,7 @@ services:
       args:
         MLFLOW_IMAGE_TAG: ${MLFLOW_IMAGE_TAG:-v2.17.0}
     ports:
-      - '${MLFLOW_HOST_PORT:-5001}:5000'
+      - '${MLFLOW_HOST_PORT:-5000}:5000'
     command: >
       mlflow server
       --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${MLFLOW_DB}
@@ -185,9 +233,24 @@ services:
       - ./data:/app/retailrocket/data
     environment:
       - PYTHONPATH=/app
+    # This service is only run on-demand by Airflow, so no command is needed.
+    command: ["sleep", "infinity"]
+
+  data_pipeline_worker:
+    build:
+      context: .
+      dockerfile: ./services/data_pipeline_worker/Dockerfile
+    volumes:
+      - ./services/data_pipeline_worker/src:/app/src
+      - ./recommender_schemas:/app/recommender_schemas
+    environment:
+      - PYTHONPATH=/app
+    # This service is only run on-demand by Airflow, so no command is needed.
+    command: ["sleep", "infinity"]
 
 volumes:
   kafka_data:
   redis_data:
   postgres_db_data:
   mlflow_data:
+  minio_data:

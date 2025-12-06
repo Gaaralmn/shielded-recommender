@@ -25,7 +25,7 @@ fi
 
 # Set environment variables
 export PYTHONPATH="${PYTHONPATH}:$(cd ../.. && pwd)"
-export MLFLOW_TRACKING_URI="http://localhost:5001"
+export MLFLOW_TRACKING_URI="http://localhost:5000"
 export KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
 export REDIS_HOST="localhost"
 export REDIS_PORT="6379"
@@ -49,7 +49,7 @@ fi
 echo "✓ Redis: OK"
 
 # Check MLflow
-if ! curl -s http://localhost:5001/health &> /dev/null; then
+if ! curl -s http://localhost:5000/health &> /dev/null; then
     echo -e "${YELLOW}⚠️  MLflow not responding. Make sure it's running:${NC}"
     echo "   docker compose up -d mlflow"
     exit 1

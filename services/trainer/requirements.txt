@@ -1,6 +1,6 @@
-tensorflow-recommenders
 mlflow==2.17.0
-kafka-python
-pydantic
 scikit-learn
 pandas
+numpy
+s3fs
+pyarrow

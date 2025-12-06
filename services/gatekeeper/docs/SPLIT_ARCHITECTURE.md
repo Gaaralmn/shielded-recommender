@@ -304,7 +304,7 @@ docker compose logs gatekeeper-consumer --tail 50
 **Fix**:
 ```bash
 # Check MLflow
-curl http://localhost:5001/health
+curl http://localhost:5000/health
 
 # Check Redis
 docker compose exec redis redis-cli PING

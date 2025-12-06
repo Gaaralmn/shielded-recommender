@@ -8,7 +8,7 @@ WORKDIR /app
 RUN useradd --create-home appuser
 
 # Copy the dependencies file to the working directory
-COPY ./services/trainer/requirements.txt .
+COPY ./services/data_pipeline_worker/requirements.txt .
 
 # Install uv and then use it to install packages from requirements.txt
 RUN pip install --no-cache-dir uv && \
@@ -18,5 +18,5 @@ RUN pip install --no-cache-dir uv && \
 USER appuser
 
 # Copy the application's code to the working directory
-COPY --chown=appuser:appuser ./services/trainer/src ./src
+COPY --chown=appuser:appuser ./services/data_pipeline_worker/src ./src
 COPY --chown=appuser:appuser ./recommender_schemas ./recommender_schemas
