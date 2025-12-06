@@ -230,7 +230,7 @@ services:
       - ./services/trainer/src:/app/src
       - ./services/trainer/dags:/app/dags
       - ./recommender_schemas:/app/recommender_schemas
-      - ./data:/app/retailrocket/data
+      - ./data:/app/data
     environment:
       - PYTHONPATH=/app
     # This service is only run on-demand by Airflow, so no command is needed.

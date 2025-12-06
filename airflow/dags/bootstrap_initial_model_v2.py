@@ -50,7 +50,7 @@ with DAG(
         command="python src/train.py",
         env_vars={
             "MLFLOW_TRACKING_URI": get_mlflow_uri(),  # Auto-adjusts for environment
-            "DATA_PATH": "/app/retailrocket/data/retailrocket/events.csv",
+            "DATA_PATH": "/app/data/retailrocket/events.csv",
             "TRAINING_TYPE": "bootstrap",
             "PYTHONPATH": "/app",
         },
@@ -65,7 +65,7 @@ with DAG(
         dev_mounts=[
             {
                 "source": "/Users/qingwang/Development/shielded-recommender/data",
-                "target": "/app/retailrocket/data",
+                "target": "/app/data",
                 "type": "bind",
             }
         ],
